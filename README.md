@@ -66,10 +66,12 @@ Minecraft already ships SDL3, so there's nothing extra to install.
 ## Play
 
 1. Open a singleplayer world.
-2. Plug in a controller and press **START**. The screen splits and Player 2 spawns next to you.
-3. Do the same for players 3 and 4. Two players stack top and bottom (switchable to side by side); three get a
+2. Plug in a controller and press **START**. The screen splits and asks *Who's playing?*
+3. Pick your profile and press **A**. The profile you used last time on that controller is already selected, so
+   it's usually just START, A. Player 2 spawns next to you with everything they had last time.
+4. Do the same for players 3 and 4. Two players stack top and bottom (switchable to side by side); three get a
    wide top view and two below; four get a quad.
-4. To leave, hold **BACK + START**. Everyone else keeps playing.
+5. To leave, hold **BACK + START**. Everyone else keeps playing.
 
 | Action | Controller |
 | --- | --- |
@@ -111,12 +113,20 @@ Controller players get a cursor in their own colour.
 
 Players don't have to stay together. One of you can be in the Nether while the others build in the Overworld.
 
-### Your profile comes back with you
+### Profiles: your save comes back with you
 
-Every player is a real player on your world. Their inventory, armour, XP, advancements, statistics and spawn point
-are saved with the world, the same way as in multiplayer. Each guest name maps to a fixed ID, so when Player 2 joins
-your world again next week, they pick up exactly where they left off. Your controller settings and guest names are
-saved too.
+Every player is a real player on your world, so their inventory, armour, XP, advancements, statistics and spawn
+point are saved with the world, the same way as in multiplayer. Guests keep that save in a **profile**:
+
+- When you join, pick your profile. Couchcraft remembers which controller each profile last played on and
+  suggests it (★), so next time it's just START, A.
+- Make a new profile from the picker, or rename one. On a controller, type with the on-screen keyboard; on a
+  keyboard, just type.
+- **Renaming keeps your save.** A profile has a fixed ID that never changes, and that ID is what your worlds save you
+  under. Rename *Player2* to *Steve* and Steve still has Player2's diamonds.
+- Each profile has its own save in every world you play, so the same profile can be in three different worlds.
+
+Profiles live in `config/couchcraft-profiles.json`. The host plays as their own Minecraft account, as always.
 
 ### House rules
 
@@ -138,6 +148,7 @@ Open them from the pause menu (**Couch Co-op…**) or with <kbd>Ctrl</kbd> + <kb
   <img src="docs/assets/readme/settings.jpg" alt="The Couch Co-op settings screen open in Player 1's half of the screen, listing each player with their controller and a Vibrate button." width="100%" />
 </p>
 
+- **Profiles.** Every saved profile, who's playing on it right now, *Rename* (and delete), and *New profile*.
 - **Players.** Every player with their colour and what they play with. Pick a controller for any player; if
   another player holds it, the two swap. P1's *Keyboard only* means no controller. Add or remove players here.
 - **Controllers.** Every connected controller, numbered, with its owner. A light next to it turns green while you
@@ -156,7 +167,7 @@ Controllers also light up in their player's colour (light bar or player LED), an
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `twoPlayerLayout` | `STACKED` | `STACKED` (P1 on top) or `SIDE_BY_SIDE` |
-| `guestNames` | `Player2..4` | Names for players 2–4 |
+| `guestNames` | `Player2..4` | Only used once, to create the first profiles. Manage profiles in the settings screen. |
 | `guestsInheritCheats` | `true` | Guests may use commands when the world allows them |
 | `lookSpeedYaw` / `lookSpeedPitch` | `280` / `190` | Full-tilt turn speed, degrees per second |
 | `invertLookY` | `false` | Invert vertical look |

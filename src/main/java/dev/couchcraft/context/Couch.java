@@ -5,6 +5,10 @@ import com.mojang.logging.LogUtils;
 import dev.couchcraft.CouchConfig;
 import dev.couchcraft.dev.DevHarness;
 import dev.couchcraft.gui.CouchScreen;
+import dev.couchcraft.gui.ProfileSelectScreen;
+import dev.couchcraft.profile.Profile;
+import dev.couchcraft.profile.Profiles;
+import net.minecraft.client.server.IntegratedServer;
 import dev.couchcraft.input.Gamepad;
 import dev.couchcraft.input.Gamepads;
 import dev.couchcraft.net.GuestConnector;
@@ -42,7 +46,7 @@ public final class Couch {
 	private static final Map<Connection, PlayerContext> BY_CONNECTION = new IdentityHashMap<>();
 	private static final Set<Connection> GUEST_CONNECTIONS = Collections.newSetFromMap(new WeakHashMap<>());
 	/** Lower-case names of guests that are, or may still be, logged in. Read from the server thread. */
-	private static final Set<String> GUEST_NAMES = ConcurrentHashMap.newKeySet();
+	private static final Map<String, UUID> GUEST_IDS = new ConcurrentHashMap<>();
 	private static final List<PlayerContext> PENDING_REMOVALS = new ArrayList<>();
 
 	private static @Nullable PlayerContext current;
@@ -81,6 +85,7 @@ public final class Couch {
 			PENDING_REMOVALS.clear();
 		}
 
+		processPendingJoins(minecraft);
 		DevHarness.frame(minecraft);
 		Gamepads.poll();
 		handleControllerJoins(minecraft);
@@ -115,7 +120,7 @@ public final class Couch {
 				if (padless != null) {
 					attachPad(padless, pad);
 				} else {
-					addGuest(minecraft, pad);
+					beginJoin(minecraft, pad);
 				}
 			} else if (pad.pressed(Gamepad.BACK)) {
 				// BACK on any free pad hands it to P1, also when P1 already has one: P1 switches controllers and the
@@ -142,7 +147,7 @@ public final class Couch {
 	private static void handleAutoGuests(final Minecraft minecraft) {
 		if (autoGuestsRemaining > 0 && minecraft.player != null && minecraft.gui.screen() == null && canAddGuest(minecraft)) {
 			autoGuestsRemaining--;
-			addGuest(minecraft, null);
+			addGuestWithFreeProfile(minecraft, null);
 		}
 	}
 
@@ -167,7 +172,14 @@ public final class Couch {
 			}
 
 			switch (i) {
-				case 0 -> addGuest(minecraft, null);
+				case 0 -> {
+					// Add a player from the keyboard: P1 picks the profile for them.
+					Screen open = minecraft.gui.screen();
+					minecraft.gui.setScreen(new ProfileSelectScreen(open, null, null, profile -> {
+						minecraft.gui.setScreen(open);
+						requestAddGuest(null, profile);
+					}, () -> minecraft.gui.setScreen(open)));
+				}
 				case 1 -> {
 					PlayerContext last = CONTEXTS.getLast();
 					if (!last.primary) {
@@ -437,7 +449,86 @@ public final class Couch {
 		return -1;
 	}
 
-	public static @Nullable PlayerContext addGuest(final Minecraft minecraft, final @Nullable Gamepad pad) {
+	/** A free pad pressed START: the new player gets their viewport straight away and picks who they are there. */
+	public static @Nullable PlayerContext beginJoin(final Minecraft minecraft, final Gamepad pad) {
+		PlayerContext guest = createGuest(minecraft);
+		if (guest == null) {
+			return null;
+		}
+
+		attachPad(guest, pad);
+		String deviceKey = pad.deviceKey();
+		try (Scope ignored = enter(guest)) {
+			guest.gui.setScreen(new ProfileSelectScreen(null, guest, deviceKey, profile -> requestConnect(guest, profile), () -> requestRemove(guest)));
+		}
+
+		LOGGER.info("[Couchcraft] Player {} is choosing a profile", guest.slot + 1);
+		return guest;
+	}
+
+	/** Adds a guest who plays as {@code profile} at the start of the next frame. Safe to call from any screen. */
+	public static void requestAddGuest(final @Nullable Gamepad pad, final Profile profile) {
+		PENDING_JOINS.add(new PendingJoin(pad, profile));
+	}
+
+	/** Adds a guest with the first free profile (or a new one). For shortcuts and development tools. */
+	public static @Nullable PlayerContext addGuestWithFreeProfile(final Minecraft minecraft, final @Nullable Gamepad pad) {
+		Profile profile = Profiles.firstFree();
+		return addGuest(minecraft, pad, profile != null ? profile : Profiles.create(Profiles.suggestName()));
+	}
+
+	public static @Nullable PlayerContext addGuest(final Minecraft minecraft, final @Nullable Gamepad pad, final Profile profile) {
+		if (Profiles.inUse(profile)) {
+			LOGGER.warn("[Couchcraft] Profile {} is already playing", profile.name());
+			return null;
+		}
+
+		PlayerContext guest = createGuest(minecraft);
+		if (guest == null) {
+			return null;
+		}
+
+		if (pad != null) {
+			attachPad(guest, pad);
+		}
+
+		connectGuest(minecraft, guest, profile);
+		return guest;
+	}
+
+	/** Logs a waiting guest in as {@code profile} at the start of the next frame. */
+	public static void requestConnect(final PlayerContext guest, final Profile profile) {
+		PENDING_CONNECTS.put(guest, profile);
+	}
+
+	private record PendingJoin(@Nullable Gamepad pad, Profile profile) {
+	}
+
+	private static final List<PendingJoin> PENDING_JOINS = new ArrayList<>();
+	private static final Map<PlayerContext, Profile> PENDING_CONNECTS = new IdentityHashMap<>();
+
+	private static void processPendingJoins(final Minecraft minecraft) {
+		if (!PENDING_CONNECTS.isEmpty()) {
+			Map<PlayerContext, Profile> connects = new IdentityHashMap<>(PENDING_CONNECTS);
+			PENDING_CONNECTS.clear();
+			connects.forEach((guest, profile) -> {
+				if (!guest.removed && guest.connection == null) {
+					connectGuest(minecraft, guest, profile);
+				}
+			});
+		}
+
+		if (!PENDING_JOINS.isEmpty()) {
+			List<PendingJoin> joins = List.copyOf(PENDING_JOINS);
+			PENDING_JOINS.clear();
+			for (PendingJoin join : joins) {
+				addGuest(minecraft, join.pad(), join.profile());
+			}
+		}
+	}
+
+	/** Creates a guest's viewport and engines, without logging in yet. Must run in the resting state. */
+	private static @Nullable PlayerContext createGuest(final Minecraft minecraft) {
 		if (!canAddGuest(minecraft) || current != primary()) {
 			return null;
 		}
@@ -447,16 +538,8 @@ public final class Couch {
 			return null;
 		}
 
-		String name = CouchConfig.get().guestName(slot, minecraft.getUser().getName());
-		// Never log in over someone already on the server (a LAN friend with the same name would be kicked).
-		var playerList = minecraft.getSingleplayerServer().getPlayerList();
-		for (int suffix = 2; playerList.getPlayerByName(name) != null && suffix < 100; suffix++) {
-			String base = CouchConfig.get().guestName(slot, minecraft.getUser().getName());
-			String tail = "_" + suffix;
-			name = base.substring(0, Math.min(base.length(), 16 - tail.length())) + tail;
-		}
-
-		UUID profileId = UUIDUtil.createOfflinePlayerUUID(name);
+		String placeholder = "Player" + (slot + 1);
+		UUID placeholderId = UUIDUtil.createOfflinePlayerUUID(placeholder);
 
 		// Insert in slot order, then lay out so the new player's engines are created at their final size.
 		int index = 0;
@@ -476,7 +559,7 @@ public final class Couch {
 		VirtualWindow.Frame previous = VirtualWindow.active();
 		VirtualWindow.set(frame);
 		try {
-			guest = PlayerContext.guest(minecraft, slot, name, profileId);
+			guest = PlayerContext.guest(minecraft, slot, placeholder, placeholderId);
 		} finally {
 			VirtualWindow.set(previous);
 		}
@@ -484,23 +567,41 @@ public final class Couch {
 		guest.viewport = viewport;
 		guest.frame = frame;
 		CONTEXTS.add(index, guest);
-		GUEST_NAMES.add(name.toLowerCase(Locale.ROOT));
 		layoutDirty = true;
 		updateLayout(minecraft);
-		if (pad != null) {
-			attachPad(guest, pad);
+		return guest;
+	}
+
+	/** Logs {@code guest} into the world as {@code profile}: the server saves them under the profile's fixed ID. */
+	private static void connectGuest(final Minecraft minecraft, final PlayerContext guest, final Profile profile) {
+		IntegratedServer server = minecraft.getSingleplayerServer();
+		if (server == null || Profiles.inUse(profile)) {
+			requestRemove(guest);
+			return;
 		}
 
+		// Never log in over someone already on the server (a LAN friend with the same name would be kicked).
+		if (server.getPlayerList().getPlayerByName(profile.name()) != null) {
+			LOGGER.warn("[Couchcraft] {} is already on this server; pick another profile", profile.name());
+			requestRemove(guest);
+			return;
+		}
+
+		guest.profile = profile;
+		guest.name = profile.name();
+		guest.profileId = profile.id();
+		guest.badgeSince = System.currentTimeMillis();
+		GUEST_IDS.put(guest.name.toLowerCase(Locale.ROOT), guest.profileId);
+		Profiles.markPlayed(profile, guest.pad != null ? guest.pad.deviceKey() : null);
 		try (Scope ignored = enter(guest)) {
-			guest.gui.setScreen(new GenericMessageScreen(Component.translatableWithFallback("couchcraft.joining", "%s is joining…", name)));
+			guest.gui.setScreen(new GenericMessageScreen(Component.translatableWithFallback("couchcraft.joining", "%s is joining…", guest.name)));
 		}
 
 		Connection connection = GuestConnector.connect(minecraft, guest);
 		guest.connection = connection;
 		BY_CONNECTION.put(connection, guest);
 		GUEST_CONNECTIONS.add(connection);
-		LOGGER.info("[Couchcraft] {} joined as player {}", name, slot + 1);
-		return guest;
+		LOGGER.info("[Couchcraft] {} joined as player {}", guest.name, guest.slot + 1);
 	}
 
 	/** Schedules a guest to leave at the start of the next frame. Safe to call from inside any scope. */
@@ -554,7 +655,9 @@ public final class Couch {
 		}
 
 		CONTEXTS.remove(context);
-		GUEST_NAMES.remove(context.name.toLowerCase(Locale.ROOT));
+		if (context.connection != null) {
+			GUEST_IDS.remove(context.name.toLowerCase(Locale.ROOT));
+		}
 		if (context.pad != null) {
 			context.pad.release();
 			context.pad = null;
@@ -580,7 +683,12 @@ public final class Couch {
 	}
 
 	public static boolean isGuestName(final String name) {
-		return GUEST_NAMES.contains(name.toLowerCase(Locale.ROOT));
+		return GUEST_IDS.containsKey(name.toLowerCase(Locale.ROOT));
+	}
+
+	/** The fixed save ID of the guest logging in as {@code name}. Read on the server thread. */
+	public static @Nullable UUID guestId(final String name) {
+		return GUEST_IDS.get(name.toLowerCase(Locale.ROOT));
 	}
 
 	/** Called when a resource reload finishes, so guests' private renderers pick up the new resources. */

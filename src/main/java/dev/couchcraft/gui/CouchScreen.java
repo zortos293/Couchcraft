@@ -6,6 +6,9 @@ import dev.couchcraft.context.Layouts;
 import dev.couchcraft.context.PlayerContext;
 import dev.couchcraft.input.Gamepad;
 import dev.couchcraft.input.Gamepads;
+import dev.couchcraft.profile.Profile;
+import dev.couchcraft.profile.Profiles;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.ChatFormatting;
@@ -47,6 +50,7 @@ public final class CouchScreen extends OptionsSubScreen {
 		this.signature = signature();
 		this.refreshers.clear();
 		this.addPlayers();
+		this.addProfiles();
 		this.addControllers();
 		this.addSettings();
 	}
@@ -66,9 +70,10 @@ public final class CouchScreen extends OptionsSubScreen {
 		if (Couch.canAddGuest(this.minecraft)) {
 			this.list.addSmall(
 				label(text("couchcraft.screen.add_hint", "or START on a free pad")),
-				Button.builder(text("couchcraft.screen.add", "Add player"), button -> {
-					Couch.addGuest(this.minecraft, null);
-				}).width(150).build()
+				Button.builder(text("couchcraft.screen.add", "Add player"), button -> this.minecraft.gui.setScreen(new ProfileSelectScreen(this, null, null, profile -> {
+					Couch.requestAddGuest(null, profile);
+					this.minecraft.gui.setScreen(new CouchScreen(this.lastScreen));
+				}, () -> this.minecraft.gui.setScreen(this)))).width(150).build()
 			);
 		} else if (Couch.contexts().size() < Couch.MAX_PLAYERS) {
 			this.list.addSmall(label(text("couchcraft.screen.add_unavailable", "More players can join in a singleplayer world").withStyle(ChatFormatting.GRAY)), null);
@@ -110,6 +115,10 @@ public final class CouchScreen extends OptionsSubScreen {
 
 	private static Component playerLabel(final PlayerContext context) {
 		MutableComponent label = Component.literal("P" + (context.slot + 1)).withColor(context.color() & 0xFFFFFF).withStyle(ChatFormatting.BOLD);
+		if (!context.primary && context.profile == null) {
+			return label.append(text("couchcraft.screen.choosing", "  choosing a profile…").withStyle(ChatFormatting.GRAY));
+		}
+
 		return label.append(Component.literal("  " + context.name).withStyle(ChatFormatting.WHITE));
 	}
 
@@ -125,6 +134,59 @@ public final class CouchScreen extends OptionsSubScreen {
 		}
 
 		return label;
+	}
+
+	// ---------------------------------------------------------------- profiles
+
+	private void addProfiles() {
+		this.list.addHeader(text("couchcraft.screen.profiles", "Profiles · each keeps its own save in every world"));
+		for (Profile profile : Profiles.all()) {
+			PlayerContext user = Profiles.playerUsing(profile);
+			MutableComponent label = Component.literal(profile.name()).withStyle(ChatFormatting.WHITE);
+			if (user != null) {
+				label.append(Component.literal("  playing as P" + (user.slot + 1)).withColor(user.color() & 0xFFFFFF));
+			}
+
+			Button rename = Button.builder(text("couchcraft.profiles.rename", "Rename"), button -> this.minecraft.gui.setScreen(new NameEntryScreen(
+				this,
+				text("couchcraft.profiles.rename_title", "Rename %s", profile.name()),
+				profile.name(),
+				profile,
+				name -> {
+					Profiles.rename(profile, name);
+					this.minecraft.gui.setScreen(new CouchScreen(this.lastScreen));
+				},
+				() -> this.minecraft.gui.setScreen(new ConfirmScreen(
+					confirmed -> {
+						if (confirmed) {
+							Profiles.delete(profile);
+						}
+
+						this.minecraft.gui.setScreen(new CouchScreen(this.lastScreen));
+					},
+					text("couchcraft.profiles.delete_title", "Delete %s?", profile.name()),
+					text("couchcraft.profiles.delete_body", "The profile is removed from this list. Whatever it saved in your worlds stays in those worlds.")
+				))
+			))).width(150).build();
+			// A profile that's playing keeps its name until that player leaves.
+			rename.active = user == null;
+			this.list.addSmall(label(label), rename);
+		}
+
+		this.list.addSmall(
+			label(text("couchcraft.screen.profiles_hint", "Joining players pick one").withStyle(ChatFormatting.GRAY)),
+			Button.builder(text("couchcraft.profiles.new", "New profile"), button -> this.minecraft.gui.setScreen(new NameEntryScreen(
+				this,
+				text("couchcraft.profiles.new_title", "New profile"),
+				Profiles.suggestName(),
+				null,
+				name -> {
+					Profiles.create(name);
+					this.minecraft.gui.setScreen(new CouchScreen(this.lastScreen));
+				},
+				null
+			))).width(150).build()
+		);
 	}
 
 	// ---------------------------------------------------------------- controllers
@@ -223,6 +285,11 @@ public final class CouchScreen extends OptionsSubScreen {
 			for (PlayerContext context : Couch.contexts()) {
 				builder.append(context.slot).append(context.name).append(';');
 			}
+		}
+
+		builder.append('|');
+		for (Profile profile : Profiles.all()) {
+			builder.append(profile.name()).append(';');
 		}
 
 		builder.append('|');

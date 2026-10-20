@@ -2,5 +2,20 @@
 	"couchcraft.joining": "%s is joining…",
 	"couchcraft.left": "Left the couch",
 	"couchcraft.hint.join": "Controller: START to join · BACK to play as P1",
-	"couchcraft.hint.p1": "Controller: BACK to play as P1"
+	"couchcraft.hint.p1": "Controller: BACK to play as P1",
+	"couchcraft.screen.open": "Couch Co-op…",
+	"couchcraft.screen.title": "Couch Co-op · Controllers",
+	"couchcraft.profiles.title": "Who's playing?  ",
+	"couchcraft.profiles.title_add": "Add a player · who's playing?",
+	"couchcraft.profiles.play": "Play as %s",
+	"couchcraft.profiles.saved": "Saved profiles",
+	"couchcraft.profiles.rename": "Rename",
+	"couchcraft.profiles.new": "New profile",
+	"couchcraft.profiles.new_title": "New profile",
+	"couchcraft.profiles.rename_title": "Rename %s",
+	"couchcraft.profiles.delete_title": "Delete %s?",
+	"couchcraft.profiles.delete_body": "The profile is removed from this list. Whatever it saved in your worlds stays in those worlds.",
+	"couchcraft.name.label": "Name",
+	"couchcraft.name.delete": "Delete",
+	"couchcraft.name.backspace": "Del"
 }

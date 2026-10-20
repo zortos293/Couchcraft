@@ -17,6 +17,7 @@
 		"PacketProcessorMixin",
 		"ScreenshotMixin",
 		"SDLEventHandlerMixin",
+		"ServerLoginPacketListenerImplMixin",
 		"SoundEngineMixin",
 		"TextInputManagerMixin",
 		"TutorialMixin",

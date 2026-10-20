@@ -6,6 +6,7 @@ import dev.couchcraft.mixin.access.CloudRendererInvoker;
 import dev.couchcraft.mixin.access.HudAccessor;
 import dev.couchcraft.mixin.access.MinecraftAccessor;
 import dev.couchcraft.mixin.access.ParticleEngineAccessor;
+import dev.couchcraft.profile.Profile;
 import java.util.UUID;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
@@ -35,8 +36,11 @@ public final class PlayerContext {
 
 	public final int slot;
 	public final boolean primary;
-	public final String name;
-	public final UUID profileId;
+	/** The player's name; for a guest it is set when they pick a profile (until then "Player N"). */
+	public String name;
+	public UUID profileId;
+	/** The saved guest profile this player is using; null for the host and for a guest still choosing. */
+	public @Nullable Profile profile;
 
 	public final GameRenderer gameRenderer;
 	public final LevelRenderer levelRenderer;

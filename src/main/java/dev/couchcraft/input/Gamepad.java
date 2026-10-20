@@ -31,6 +31,7 @@ public final class Gamepad {
 	private final int instanceId;
 	private final long handle;
 	private final String name;
+	private final String deviceKey;
 	private final boolean[] down = new boolean[BUTTON_COUNT];
 	private final boolean[] previous = new boolean[BUTTON_COUNT];
 	/** Buttons whose current press was used for something else (joining, claiming) and must be released first. */
@@ -50,6 +51,23 @@ public final class Gamepad {
 		this.instanceId = instanceId;
 		this.handle = handle;
 		this.name = name;
+		String serial = SDLGamepad.SDL_GetGamepadSerial(handle);
+		if (serial != null && !serial.isBlank()) {
+			this.deviceKey = "serial:" + serial;
+		} else {
+			String path = SDLGamepad.SDL_GetGamepadPath(handle);
+			this.deviceKey = String.format(
+				"usb:%04x:%04x:%s", SDLGamepad.SDL_GetGamepadVendor(handle) & 0xFFFF, SDLGamepad.SDL_GetGamepadProduct(handle) & 0xFFFF, path == null ? name : path
+			);
+		}
+	}
+
+	/**
+	 * Identifies this physical controller across sessions: its serial number when SDL knows it (DualSense, Switch Pro,
+	 * many Bluetooth pads), otherwise its model plus the port it's plugged into.
+	 */
+	public String deviceKey() {
+		return this.deviceKey;
 	}
 
 	void update() {

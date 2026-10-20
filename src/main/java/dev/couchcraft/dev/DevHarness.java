@@ -57,13 +57,19 @@ public final class DevHarness {
 	private static double markZ;
 	private static float markYaw;
 	private static int slotBefore;
+	private static String savedName = "";
+	private static int savedSlot = -1;
+	private static java.util.UUID savedId = new java.util.UUID(0L, 0L);
 
 	static {
 		STEPS.add(new Step(1_000L, "attach virtual pad", PAD::attach));
 		STEPS.add(new Step(5_000L, "pad presses START", () -> PAD.button(Gamepad.START, true)));
 		STEPS.add(new Step(5_300L, "pad releases START", () -> PAD.button(Gamepad.START, false)));
+		STEPS.add(new Step(6_300L, "capture profile picker", () -> capture("00-profile-picker")));
+		STEPS.add(new Step(6_800L, "pad presses A (play as suggested profile)", () -> PAD.button(Gamepad.A, true)));
+		STEPS.add(new Step(7_100L, "pad releases A", () -> PAD.button(Gamepad.A, false)));
 		STEPS.add(new Step(14_000L, "capture 2p-stacked", () -> capture("01-2p-stacked")));
-		STEPS.add(new Step(14_200L, "lift Player2 into open air", () -> serverCommand("execute as Player2 at @s run tp @s ~ 200 ~")));
+		STEPS.add(new Step(14_200L, "lift Player2 into open air", () -> asGuest(1, minecraft -> serverCommand("execute as " + minecraft.player.getGameProfile().name() + " at @s run tp @s ~ 200 ~"))));
 		STEPS.add(new Step(14_500L, "pad walks forward (left stick)", () -> {
 			mark();
 			PAD.axis(SDLGamepad.SDL_GAMEPAD_AXIS_LEFTY, -1.0F);
@@ -111,10 +117,21 @@ public final class DevHarness {
 		STEPS.add(new Step(25_000L, "capture 2p side by side", () -> capture("03-2p-side")));
 		STEPS.add(new Step(26_000L, "add two keyboard-less guests", () -> {
 			CouchConfig.get().twoPlayerLayout = Layouts.TwoPlayer.STACKED.name();
-			Couch.addGuest(Minecraft.getInstance(), null);
-			Couch.addGuest(Minecraft.getInstance(), null);
+			Couch.addGuestWithFreeProfile(Minecraft.getInstance(), null);
+			Couch.addGuestWithFreeProfile(Minecraft.getInstance(), null);
 		}));
 		STEPS.add(new Step(37_000L, "capture 4p quad", () -> capture("04-4p-quad")));
+		STEPS.add(new Step(37_100L, "P3 opens the rename keyboard", () -> asGuest(2, minecraft -> minecraft.gui.setScreen(new dev.couchcraft.gui.NameEntryScreen(
+			null, net.minecraft.network.chat.Component.literal("Rename Player3"), "Player3", null, name -> {}, () -> {}
+		)))));
+		STEPS.add(new Step(37_400L, "capture rename keyboard in a quarter", () -> capture("04b-rename-keyboard")));
+		STEPS.add(new Step(37_450L, "P3 closes the keyboard", () -> asGuest(2, minecraft -> minecraft.gui.setScreen(null))));
+		STEPS.add(new Step(37_500L, "remember P2's save state", () -> asGuest(1, minecraft -> {
+			savedName = minecraft.player.getGameProfile().name();
+			savedSlot = minecraft.player.getInventory().getSelectedSlot();
+			savedId = minecraft.player.getUUID();
+			LOGGER.info("[Couchcraft/dev] P2 is {} with hotbar slot {}", savedName, savedSlot);
+		})));
 		STEPS.add(new Step(38_000L, "pad holds BACK+START (leave)", () -> {
 			PAD.button(Gamepad.BACK, true);
 			PAD.button(Gamepad.START, true);
@@ -123,6 +140,13 @@ public final class DevHarness {
 			PAD.button(Gamepad.BACK, false);
 			PAD.button(Gamepad.START, false);
 			LOGGER.info("[Couchcraft/dev] Players after leave combo = {} (expected 3)", Couch.contexts().size());
+		}));
+		STEPS.add(new Step(40_500L, "rename P2's profile to Steve", () -> {
+			for (var profile : dev.couchcraft.profile.Profiles.all()) {
+				if (profile.name().equals(savedName)) {
+					dev.couchcraft.profile.Profiles.rename(profile, "Steve");
+				}
+			}
 		}));
 		STEPS.add(new Step(43_000L, "capture 3p", () -> capture("05-3p")));
 		STEPS.add(new Step(44_000L, "host pauses", () -> Minecraft.getInstance().pauseGame(false)));
@@ -149,13 +173,24 @@ public final class DevHarness {
 			STEPS.clear();
 			STEPS.add(new Step(3_000L, "rejoin: pad presses START", () -> PAD.button(Gamepad.START, true)));
 			STEPS.add(new Step(3_300L, "rejoin: pad releases START", () -> PAD.button(Gamepad.START, false)));
-			STEPS.add(new Step(13_000L, "capture rejoined", () -> capture("10-rejoined")));
+			STEPS.add(new Step(4_300L, "capture picker suggesting Steve", () -> capture("09b-picker-suggests-steve")));
+			STEPS.add(new Step(4_800L, "rejoin: pad presses A", () -> PAD.button(Gamepad.A, true)));
+			STEPS.add(new Step(5_100L, "rejoin: pad releases A", () -> PAD.button(Gamepad.A, false)));
+			STEPS.add(new Step(13_000L, "capture rejoined", () -> {
+				capture("10-rejoined");
+				asGuest(1, minecraft -> LOGGER.info(
+					"[Couchcraft/dev] Rejoined as {} with hotbar slot {} (expected Steve, {}), save id unchanged = {}",
+					minecraft.player.getGameProfile().name(), minecraft.player.getInventory().getSelectedSlot(), savedSlot,
+					minecraft.player.getUUID().equals(savedId)
+				));
+			}));
 			STEPS.add(new Step(14_000L, "second pad attaches", PAD_P1::attach));
 			STEPS.add(new Step(15_000L, "second pad presses BACK (claim P1)", () -> PAD_P1.button(Gamepad.BACK, true)));
 			STEPS.add(new Step(15_300L, "second pad releases BACK", () -> {
 				PAD_P1.button(Gamepad.BACK, false);
 				LOGGER.info("[Couchcraft/dev] P1 pad = {} (expected the second virtual pad)", Couch.primary().pad == null ? "none" : Couch.primary().pad.name());
 			}));
+			STEPS.add(new Step(15_600L, "lift P1 into open air", () -> serverCommand("execute as " + Minecraft.getInstance().getUser().getName() + " at @s run tp @s ~ 200 ~")));
 			STEPS.add(new Step(16_000L, "P1 pad walks", () -> {
 				markPrimary();
 				PAD_P1.axis(SDLGamepad.SDL_GAMEPAD_AXIS_LEFTX, 1.0F);

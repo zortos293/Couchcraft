@@ -6,6 +6,8 @@ import dev.couchcraft.CouchConfig;
 import dev.couchcraft.context.Couch;
 import dev.couchcraft.context.PlayerContext;
 import dev.couchcraft.context.VirtualWindow;
+import dev.couchcraft.gui.CursorHint;
+import net.minecraft.client.gui.components.AbstractWidget;
 import dev.couchcraft.mixin.access.KeyMappingAccessor;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -42,6 +44,9 @@ public final class PadController {
 	private double scrollAccumulator;
 	private int heldMenuButton = -1;
 	private int lastHurtTime;
+	/** Frames left to wait for a {@link CursorHint} target to get its position (list rows are placed when drawn). */
+	private int hintFramesLeft;
+	private long lastPadActivityNanos;
 
 	public PadController(final PlayerContext context) {
 		this.context = context;
@@ -90,6 +95,10 @@ public final class PadController {
 		if (pad == null) {
 			this.releaseWorldBindings(minecraft.options);
 			return;
+		}
+
+		if (pad.isActive()) {
+			this.lastPadActivityNanos = now;
 		}
 
 		if (!this.context.primary && this.checkLeaveCombo(pad, now)) {
@@ -206,13 +215,36 @@ public final class PadController {
 
 		if (this.cursorScreen != screen) {
 			this.cursorScreen = screen;
-			this.cursorX = screenWidth / 2.0;
-			this.cursorY = screenHeight / 2.0;
-			this.moveCursor(minecraft, originX, originY, 0.0, 0.0);
+			this.hintFramesLeft = screen instanceof CursorHint ? 20 : 0;
+			if (this.context.primary) {
+				// P1's cursor is the real mouse; leave it where it is unless the pad is what they're using.
+				this.cursorX = minecraft.mouseHandler.xpos() - originX;
+				this.cursorY = minecraft.mouseHandler.ypos() - originY;
+			} else {
+				this.cursorX = screenWidth / 2.0;
+				this.cursorY = screenHeight / 2.0;
+				this.moveCursor(minecraft, originX, originY, 0.0, 0.0);
+			}
 		} else if (this.context.primary) {
 			// The real mouse may have moved since last frame; follow it.
 			this.cursorX = minecraft.mouseHandler.xpos() - originX;
 			this.cursorY = minecraft.mouseHandler.ypos() - originY;
+		}
+
+		if (this.hintFramesLeft > 0) {
+			this.hintFramesLeft--;
+			AbstractWidget target = ((CursorHint)screen).couchcraft$cursorTarget();
+			boolean usingPad = !this.context.primary || Util.getNanos() - this.lastPadActivityNanos < 600_000_000L;
+			if (target == null || !usingPad) {
+				this.hintFramesLeft = 0;
+			} else if (target.getWidth() > 0 && (target.getX() != 0 || target.getY() != 0)) {
+				this.hintFramesLeft = 0;
+				double oldX = this.cursorX;
+				double oldY = this.cursorY;
+				this.cursorX = (target.getX() + target.getWidth() / 2.0) * screenPerGui;
+				this.cursorY = (target.getY() + target.getHeight() / 2.0) * screenPerGui;
+				this.moveCursor(minecraft, originX, originY, this.cursorX - oldX, this.cursorY - oldY);
+			}
 		}
 
 		CouchConfig config = CouchConfig.get();

@@ -75,6 +75,11 @@ public final class CouchHud {
 
 	/** A name badge that fades out a few seconds after joining or picking up a controller. */
 	private static void drawBadge(final GuiGraphicsExtractor graphics, final Minecraft minecraft, final PlayerContext context) {
+		if (!context.primary && context.profile == null) {
+			// Still picking a profile: the name isn't theirs yet.
+			return;
+		}
+
 		long age = System.currentTimeMillis() - context.badgeSince;
 		if (age < 0L || age > BADGE_MILLIS || minecraft.gui.screen() != null && minecraft.level != null) {
 			return;
