@@ -1,0 +1,6 @@
+{
+	"couchcraft.joining": "%s is joining…",
+	"couchcraft.left": "Left the couch",
+	"couchcraft.hint.join": "Controller: START to join · BACK to play as P1",
+	"couchcraft.hint.p1": "Controller: BACK to play as P1"
+}

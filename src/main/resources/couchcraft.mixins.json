@@ -1,0 +1,39 @@
+{
+	"required": true,
+	"package": "dev.couchcraft.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"ClientCommonPacketListenerImplMixin",
+		"ClientConfigurationPacketListenerImplMixin",
+		"ClientHandshakePacketListenerImplMixin",
+		"ClientPacketListenerMixin",
+		"GlCommandEncoderMixin",
+		"GuiMixin",
+		"IntegratedServerMixin",
+		"LevelExtractorMixin",
+		"MinecraftMixin",
+		"MouseHandlerMixin",
+		"PauseScreenMixin",
+		"PacketProcessorMixin",
+		"ScreenshotMixin",
+		"SDLEventHandlerMixin",
+		"SoundEngineMixin",
+		"TextInputManagerMixin",
+		"TutorialMixin",
+		"WindowMixin",
+		"access.ClientCommonPacketListenerImplAccessor",
+		"access.ClientHandshakePacketListenerImplAccessor",
+		"access.CloudRendererInvoker",
+		"access.HudAccessor",
+		"access.KeyMappingAccessor",
+		"access.MinecraftAccessor",
+		"access.ParticleEngineAccessor",
+		"access.ToggleKeyMappingAccessor"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}
