@@ -7,7 +7,7 @@
 <p align="center"><strong>Real split-screen co-op for Minecraft Java. One game, one window, up to four players.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/zortos293/Couchcraft/releases/latest">
+  <a href="https://github.com/zortos293/Couchcraft/releases">
     <img src="https://img.shields.io/badge/Download-Mod_jar-FFC400?style=for-the-badge&logo=github&logoColor=white&labelColor=111111" alt="Download the mod" />
   </a>
   <img src="https://img.shields.io/badge/Minecraft-26.3-16A05A?style=for-the-badge&labelColor=111111" alt="Minecraft 26.3" />
@@ -57,7 +57,7 @@ like the console editions used to.
 ## Get Couchcraft
 
 1. Install [Fabric Loader](https://fabricmc.net/use/) for Minecraft 26.3.
-2. Download `couchcraft-<version>.jar` from [Releases](https://github.com/zortos293/Couchcraft/releases/latest).
+2. Download `couchcraft-<version>.jar` from [Releases](https://github.com/zortos293/Couchcraft/releases).
 3. Put it in your `.minecraft/mods` folder and start the game with the Fabric profile.
 
 Any controller that SDL3 recognises works: Xbox, DualSense / DualShock, Switch Pro, 8BitDo and most others.
