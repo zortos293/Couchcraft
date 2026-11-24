@@ -1,0 +1,103 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Publish a GitHub release for the current version'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build mod
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.mod.outputs.version }}
+      prerelease: ${{ steps.mod.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      # gradlew is committed without the executable bit.
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Read mod version
+        id: mod
+        run: |
+          version="$(sed -n 's/^version=//p' gradle.properties | head -n 1)"
+          if [ -z "$version" ]; then
+            echo "::error::No version found in gradle.properties"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          case "$version" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Build with Gradle
+        run: ./gradlew build
+
+      - name: Upload mod JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: couchcraft-${{ steps.mod.outputs.version }}
+          path: build/libs/couchcraft-${{ steps.mod.outputs.version }}.jar
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.release)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check tag matches mod version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match mod version v$VERSION"
+            exit 1
+          fi
+
+      - name: Download mod JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: couchcraft-${{ needs.build.outputs.version }}
+          path: dist
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          name: Couchcraft ${{ needs.build.outputs.version }}
+          prerelease: ${{ needs.build.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          files: dist/couchcraft-${{ needs.build.outputs.version }}.jar
